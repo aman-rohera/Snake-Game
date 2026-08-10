@@ -53,12 +53,12 @@ Controls can be customized in the Settings menu.
 
 ##### Linux/macOS
 ```bash
-g++ -std=c++17 -O2 -pthread snake_master.cpp -o snake_master
+g++ -std=c++17 -O2 -pthread snake_game.cpp -o snake_game
 ```
 
 #### Windows (MinGW)
 ```bash
-g++ -std=c++17 -O2 snake_master.cpp -o snake_master.exe
+g++ -std=c++17 -O2 snake_game.cpp -o snake_game.exe
 ```
 
 #### Running the Game
@@ -67,7 +67,7 @@ g++ -std=c++17 -O2 snake_master.cpp -o snake_master.exe
 ./snake_master
 
 # Windows
-snake_master.exe
+    .exe
 ```
 
 --

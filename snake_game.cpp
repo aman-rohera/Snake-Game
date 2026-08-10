@@ -76,6 +76,8 @@ namespace Color {
 static const string SNAKE_HEAD = Color::BRIGHT_GREEN + "🐉" + Color::RESET;
 static const string SNAKE_BODY = Color::GREEN + "🐉" + Color::RESET;
 static const string SNAKE_INVINCIBLE = Color::BRIGHT_CYAN + "🐉" + Color::RESET;
+static const string SNAKE2_HEAD = Color::BRIGHT_YELLOW + "🐍" + Color::RESET;
+static const string SNAKE2_BODY = Color::YELLOW + "🐉" + Color::RESET;
 static const string FOOD_NORMAL = Color::BRIGHT_RED + "🍎" + Color::RESET;
 static const string FOOD_GOLDEN = Color::BRIGHT_YELLOW + "⭐" + Color::RESET;
 static const string FOOD_POISON = Color::MAGENTA + "☠️" + Color::RESET;
@@ -118,6 +120,8 @@ struct GameConfig {
 struct GameState {
     deque<Vec> snake;
     Dir dir = RIGHT;
+    deque<Vec> snake2;
+    Dir dir2 = LEFT;
     Vec food{-1, -1};
     FoodType foodType = NORMAL;
     set<pair<int,int>> obstacles;
@@ -126,15 +130,19 @@ struct GameState {
     PowerUpType activePowerUp = NONE;
     int powerUpTimer = 0;
     bool gameOver = false, quit = false, paused = false;
-    int score = 0, moves = 0;
+    int score = 0, score2 = 0, moves = 0;
     int goldenApplesEaten = 0, poisonApplesEaten = 0;
+    int goldenApplesEaten2 = 0, poisonApplesEaten2 = 0;
     int segmentsToGrow = 0, segmentsToShrink = 0;
+    int segmentsToGrow2 = 0, segmentsToShrink2 = 0;
     int lastLevelUpScore = 0;
     chrono::steady_clock::time_point startTime;
     vector<pair<Dir, Vec>> moveHistory; 
+    string loserInfo = "";
 };
 
 static atomic<Dir> inputDir;
+static atomic<Dir> inputDir2;
 static atomic<bool> inputQuit{false}, inputPause{false};
 static KeyBindings currentKeys;
 
@@ -261,6 +269,7 @@ void placeFood(const GameConfig& cfg, GameState& st) {
     vector<pair<int,int>> freeCells;
     vector<vector<bool>> occ(cfg.rows, vector<bool>(cfg.cols, false));
     for (auto &p : st.snake) if (inBounds(cfg, p)) occ[p.r][p.c] = true;
+    for (auto &p : st.snake2) if (inBounds(cfg, p)) occ[p.r][p.c] = true;
     for (auto &o : st.obstacles) occ[o.first][o.second] = true;
     for (auto &d : st.dynamicObstacles) occ[d.pos.r][d.pos.c] = true;
     for (int r=0; r<cfg.rows; r++) for (int c=0; c<cfg.cols; c++) if (!occ[r][c]) freeCells.push_back({r,c});
@@ -277,6 +286,7 @@ void spawnPowerUp(const GameConfig& cfg, GameState& st) {
     vector<pair<int,int>> freeCells;
     vector<vector<bool>> occ(cfg.rows, vector<bool>(cfg.cols, false));
     for (auto &p : st.snake) if (inBounds(cfg, p)) occ[p.r][p.c] = true;
+    for (auto &p : st.snake2) if (inBounds(cfg, p)) occ[p.r][p.c] = true;
     for (auto &o : st.obstacles) occ[o.first][o.second] = true;
     for (int r=0; r<cfg.rows; r++) for (int c=0; c<cfg.cols; c++) if (!occ[r][c]) freeCells.push_back({r,c});
     if (freeCells.empty()) return;
@@ -407,8 +417,8 @@ void drawEnhancedUI(const GameConfig& cfg, int originRow, int originCol, const G
          << "╚═══════════════════════╝" << Color::RESET;
 
     cout << gotorc(startRow+3, panelCol) << Color::bg(22) << Color::BRIGHT_WHITE << " ═══ STATS ═══════════ " << Color::RESET;
-    cout << gotorc(startRow+4, panelCol) << Color::BRIGHT_GREEN << "💰 Score: " << Color::BRIGHT_WHITE << Color::BOLD << setw(5) << st.score << Color::RESET;
-    cout << gotorc(startRow+5, panelCol) << Color::BRIGHT_CYAN << "📏 Length: " << Color::BRIGHT_WHITE << setw(4) << st.snake.size() << Color::RESET;
+    cout << gotorc(startRow+4, panelCol) << Color::BRIGHT_GREEN << "💰 P1 Score: " << Color::BRIGHT_WHITE << Color::BOLD << setw(5) << st.score << Color::RESET;
+    cout << gotorc(startRow+5, panelCol) << Color::BRIGHT_YELLOW << "💰 P2 Score: " << Color::BRIGHT_WHITE << Color::BOLD << setw(5) << st.score2 << Color::RESET;
     cout << gotorc(startRow+6, panelCol) << Color::BRIGHT_MAGENTA << "🎯 Level: " << Color::BRIGHT_WHITE << cfg.currentLevel << "/" << cfg.maxLevel << "   " << Color::RESET;
     cout << gotorc(startRow+7, panelCol) << Color::BRIGHT_BLUE << "⚡ Speed: " << Color::BRIGHT_WHITE << cfg.currentFps << " FPS  " << Color::RESET;
 
@@ -435,8 +445,9 @@ void drawEnhancedUI(const GameConfig& cfg, int originRow, int originCol, const G
     cout << gotorc(startRow+16, panelCol) << Color::MAGENTA << "☠ Poison: " << Color::BRIGHT_WHITE << st.poisonApplesEaten << "   " << Color::RESET;
 
     cout << gotorc(startRow+18, panelCol) << Color::bg(17) << Color::BRIGHT_WHITE << " ═══ CONTROLS ═════════ " << Color::RESET;
-    cout << gotorc(startRow+19, panelCol) << Color::WHITE << "WASD/Arrows: Move     " << Color::RESET;
-    cout << gotorc(startRow+20, panelCol) << Color::YELLOW << "P: Pause  Q: Quit     " << Color::RESET;
+    cout << gotorc(startRow+19, panelCol) << Color::BRIGHT_GREEN << "P1 🐉:  ↑ ↓ ← →       " << Color::RESET;
+    cout << gotorc(startRow+20, panelCol) << Color::BRIGHT_YELLOW << "P2 🐍:  W A S D       " << Color::RESET;
+    cout << gotorc(startRow+21, panelCol) << Color::YELLOW << "P: Pause   Q: Quit    " << Color::RESET;
 
     cout << gotorc(startRow+22, panelCol) << Color::bg(235) << Color::BRIGHT_WHITE << " ═══ LEGEND ═══════════ " << Color::RESET;
     cout << gotorc(startRow+23, panelCol) << Color::BRIGHT_RED << "◆" << Color::WHITE << "+10  " << Color::BRIGHT_YELLOW << "★" << Color::WHITE << "+50  " << Color::MAGENTA << "☠" << Color::WHITE << "-30" << Color::RESET;
@@ -738,7 +749,11 @@ void inputThreadFunc() {
             if (ch == currentKeys.quit) { inputQuit = true; break; }
             if (ch == currentKeys.pause) { inputPause = !inputPause.load(); }
 
-            if (ch == currentKeys.up) inputDir = UP;
+            if (ch == 'w') inputDir2 = UP;
+            else if (ch == 's') inputDir2 = DOWN;
+            else if (ch == 'a') inputDir2 = LEFT;
+            else if (ch == 'd') inputDir2 = RIGHT;
+            else if (ch == currentKeys.up) inputDir = UP;
             else if (ch == currentKeys.down) inputDir = DOWN;
             else if (ch == currentKeys.left) inputDir = LEFT;
             else if (ch == currentKeys.right) inputDir = RIGHT;
@@ -751,9 +766,11 @@ bool showGameOverScreen(const GameConfig& cfg, int originRow, int originCol, Gam
     int msgRow = layout.originRow + cfg.rows/2 - 5, msgCol = layout.originCol + cfg.cols - 14;
     cout << gotorc(msgRow, msgCol) << Color::bg(52) << Color::BRIGHT_WHITE << Color::BOLD << "                        " << Color::RESET;
     cout << gotorc(msgRow+1, msgCol) << Color::bg(52) << Color::BRIGHT_WHITE << Color::BOLD << "     GAME OVER! 💀      " << Color::RESET;
-    cout << gotorc(msgRow+2, msgCol) << Color::bg(52) << Color::BRIGHT_YELLOW << "  Score: " << st.score << "             " << Color::RESET;
-    cout << gotorc(msgRow+3, msgCol) << Color::bg(52) << Color::BRIGHT_CYAN << "  Length: " << st.snake.size() << "             " << Color::RESET;
-    cout << gotorc(msgRow+4, msgCol) << Color::bg(52) << Color::BRIGHT_MAGENTA << "  Level: " << cfg.currentLevel << "              " << Color::RESET;
+    cout << gotorc(msgRow+2, msgCol) << Color::bg(52) << Color::BRIGHT_YELLOW << " P1: " << setw(4) << st.score << " | P2: " << setw(4) << st.score2 << "    " << Color::RESET;
+    string loserMsg = st.loserInfo.empty() ? "Game Over" : st.loserInfo;
+    if (loserMsg.length() > 22) loserMsg = loserMsg.substr(0, 22);
+    cout << gotorc(msgRow+3, msgCol) << Color::bg(52) << Color::BRIGHT_RED << Color::BOLD << " " << setw(22) << loserMsg << " " << Color::RESET;
+    cout << gotorc(msgRow+4, msgCol) << Color::bg(52) << Color::BRIGHT_MAGENTA << " Level: " << cfg.currentLevel << "               " << Color::RESET;
     cout << gotorc(msgRow+5, msgCol) << Color::bg(52) << Color::BRIGHT_WHITE << Color::BOLD << "                        " << Color::RESET;
     cout << gotorc(msgRow+7, msgCol) << Color::bg(22) << Color::BRIGHT_WHITE << " R: Replay  Enter: Play " << Color::RESET;
     cout << gotorc(msgRow+8, msgCol) << Color::bg(88) << Color::BRIGHT_WHITE << " Other Key: Menu        " << Color::RESET;
@@ -779,31 +796,46 @@ bool showGameOverScreen(const GameConfig& cfg, int originRow, int originCol, Gam
 
 void initGameState(const GameConfig& cfg, GameState& st) {
     st.snake.clear();
+    st.snake2.clear();
     st.obstacles.clear();
     st.dynamicObstacles.clear();
     st.powerUps.clear();
     st.gameOver = false;
     st.quit = false;
     st.score = 0;
+    st.score2 = 0;
     st.moves = 0;
     st.goldenApplesEaten = 0;
     st.poisonApplesEaten = 0;
+    st.goldenApplesEaten2 = 0;
+    st.poisonApplesEaten2 = 0;
     st.segmentsToGrow = 0;
     st.segmentsToShrink = 0;
+    st.segmentsToGrow2 = 0;
+    st.segmentsToShrink2 = 0;
     st.dir = RIGHT;
+    st.dir2 = LEFT;
     st.paused = false;
     st.lastLevelUpScore = 0;
     st.activePowerUp = NONE;
     st.powerUpTimer = 0;
     st.startTime = chrono::steady_clock::now();
     st.moveHistory.clear();
+    st.loserInfo = "";
 
-    int sr = cfg.rows/2, sc = cfg.cols/2 - 2;
-    st.snake.push_back({sr, sc+2});
-    st.snake.push_back({sr, sc+1});
-    st.snake.push_back({sr, sc});
+    int sr = cfg.rows/2;
+    int sc1 = max(1, cfg.cols/4);
+    st.snake.push_back({sr, sc1+1});
+    st.snake.push_back({sr, sc1});
+    st.snake.push_back({sr, sc1-1});
+
+    int sc2 = max(sc1 + 4, 3 * cfg.cols / 4);
+    st.snake2.push_back({sr, sc2-1});
+    st.snake2.push_back({sr, sc2});
+    st.snake2.push_back({sr, sc2+1});
 
     inputDir = st.dir;
+    inputDir2 = st.dir2;
     inputQuit = false;
     inputPause = false;
 
@@ -846,6 +878,11 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
     for (size_t i=1; i<st.snake.size(); ++i)
         drawCell(cfg, originRow, originCol, st.snake[i], SNAKE_BODY);
     drawCell(cfg, originRow, originCol, st.snake.front(), SNAKE_HEAD);
+
+    for (size_t i=1; i<st.snake2.size(); ++i)
+        drawCell(cfg, originRow, originCol, st.snake2[i], SNAKE2_BODY);
+    drawCell(cfg, originRow, originCol, st.snake2.front(), SNAKE2_HEAD);
+
     drawEnhancedUI(cfg, originRow, originCol, st, layout);
     cout.flush();
 
@@ -871,10 +908,17 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
             for (size_t i=1; i<st.snake.size(); ++i)
                 drawCell(cfg, originRow, originCol, st.snake[i], SNAKE_BODY);
             drawCell(cfg, originRow, originCol, st.snake.front(), st.activePowerUp == INVINCIBILITY ? SNAKE_INVINCIBLE : SNAKE_HEAD);
+            for (size_t i=1; i<st.snake2.size(); ++i)
+                drawCell(cfg, originRow, originCol, st.snake2[i], SNAKE2_BODY);
+            drawCell(cfg, originRow, originCol, st.snake2.front(), SNAKE2_HEAD);
         }
 
         Dir nd = inputDir.load();
         if (!isOpposite(st.dir, nd)) st.dir = nd;
+
+        Dir nd2 = inputDir2.load();
+        if (!isOpposite(st.dir2, nd2)) st.dir2 = nd2;
+
         if (inputQuit.load()) { st.quit = true; break; }
 
         updateGameSpeed(cfg, st);
@@ -893,47 +937,68 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
 
         if (frameCount % 150 == 0) spawnPowerUp(cfg, st);
 
-        Vec newHead = step(st.snake.front(), st.dir);
+        Vec newHead1 = step(st.snake.front(), st.dir);
+        Vec newHead2 = step(st.snake2.front(), st.dir2);
+
         if (cfg.bordersEnabled) {
-            if (!inBounds(cfg, newHead)) st.gameOver = true;
+            if (!inBounds(cfg, newHead1)) { st.gameOver = true; st.loserInfo = "Player 1 hit wall"; }
+            if (!inBounds(cfg, newHead2)) { st.gameOver = true; st.loserInfo = st.loserInfo.empty() ? "Player 2 hit wall" : "Both hit wall"; }
         } else {
-            newHead = wrapPosition(cfg, newHead);
+            newHead1 = wrapPosition(cfg, newHead1);
+            newHead2 = wrapPosition(cfg, newHead2);
         }
+
+        bool p1Lost = false, p2Lost = false;
 
         if (!st.gameOver && st.activePowerUp != INVINCIBILITY) {
-            if (st.obstacles.count({newHead.r, newHead.c})) st.gameOver = true;
+            if (st.obstacles.count({newHead1.r, newHead1.c})) { p1Lost = true; st.loserInfo = "Player 1 hit obstacle"; }
             for (auto& dob : st.dynamicObstacles)
-                if (dob.pos.r == newHead.r && dob.pos.c == newHead.c) st.gameOver = true;
+                if (dob.pos.r == newHead1.r && dob.pos.c == newHead1.c) { p1Lost = true; st.loserInfo = "Player 1 hit obstacle"; }
             for (auto &seg : st.snake)
-                if (seg.r == newHead.r && seg.c == newHead.c) { st.gameOver = true; break; }
+                if (seg.r == newHead1.r && seg.c == newHead1.c) { p1Lost = true; st.loserInfo = "Player 1 hit self"; }
+            for (auto &seg : st.snake2)
+                if (seg.r == newHead1.r && seg.c == newHead1.c) { p1Lost = true; st.loserInfo = "Player 1 hit Player 2"; }
+
+            if (st.obstacles.count({newHead2.r, newHead2.c})) { p2Lost = true; st.loserInfo = p2Lost ? st.loserInfo : "Player 2 hit obstacle"; }
+            for (auto& dob : st.dynamicObstacles)
+                if (dob.pos.r == newHead2.r && dob.pos.c == newHead2.c) { p2Lost = true; st.loserInfo = "Player 2 hit obstacle"; }
+            for (auto &seg : st.snake2)
+                if (seg.r == newHead2.r && seg.c == newHead2.c) { p2Lost = true; st.loserInfo = "Player 2 hit self"; }
+            for (auto &seg : st.snake)
+                if (seg.r == newHead2.r && seg.c == newHead2.c) { p2Lost = true; st.loserInfo = "Player 2 hit Player 1"; }
         }
+
+        if (newHead1.r == newHead2.r && newHead1.c == newHead2.c) {
+            p1Lost = true; p2Lost = true; st.loserInfo = "Head-on collision!";
+        }
+
+        if (p1Lost || p2Lost) st.gameOver = true;
         if (st.gameOver) break;
 
-        Vec tail = st.snake.back();
-        st.snake.push_front(newHead);
-        st.moves++;
-        st.moveHistory.push_back({st.dir, newHead});
+        Vec tail1 = st.snake.back();
+        st.snake.push_front(newHead1);
 
-        bool ate = (newHead.r == st.food.r && newHead.c == st.food.c);
-        if (ate) {
-            if (st.foodType == GOLDEN) {
-                st.score += cfg.goldenAppleScore;
-                st.goldenApplesEaten++;
-                st.segmentsToGrow += 2;
-            } else if (st.foodType == POISON) {
-                st.score += cfg.poisonApplePenalty;
-                st.poisonApplesEaten++;
-                st.segmentsToShrink += 2;
-            } else {
-                st.score += cfg.normalAppleScore;
-                st.segmentsToGrow += 1;
-            }
+        Vec tail2 = st.snake2.back();
+        st.snake2.push_front(newHead2);
+        st.moves++;
+
+        bool ate1 = (newHead1.r == st.food.r && newHead1.c == st.food.c);
+        bool ate2 = (newHead2.r == st.food.r && newHead2.c == st.food.c);
+
+        if (ate1) {
+            if (st.foodType == GOLDEN) { st.score += cfg.goldenAppleScore; st.goldenApplesEaten++; st.segmentsToGrow += 2; }
+            else if (st.foodType == POISON) { st.score += cfg.poisonApplePenalty; st.poisonApplesEaten++; st.segmentsToShrink += 2; }
+            else { st.score += cfg.normalAppleScore; st.segmentsToGrow += 1; }
             placeFood(cfg, st);
-            checkLevelUp(cfg, st, originRow, originCol, layout);
+        } else if (ate2) {
+            if (st.foodType == GOLDEN) { st.score2 += cfg.goldenAppleScore; st.goldenApplesEaten2++; st.segmentsToGrow2 += 2; }
+            else if (st.foodType == POISON) { st.score2 += cfg.poisonApplePenalty; st.poisonApplesEaten2++; st.segmentsToShrink2 += 2; }
+            else { st.score2 += cfg.normalAppleScore; st.segmentsToGrow2 += 1; }
+            placeFood(cfg, st);
         }
 
         for (auto it = st.powerUps.begin(); it != st.powerUps.end();) {
-            if (it->pos.r == newHead.r && it->pos.c == newHead.c) {
+            if (it->pos.r == newHead1.r && it->pos.c == newHead1.c) {
                 st.activePowerUp = it->type;
                 st.powerUpTimer = it->duration;
                 it = st.powerUps.erase(it);
@@ -947,24 +1012,6 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
             if (st.powerUpTimer == 0) st.activePowerUp = NONE;
         }
 
-        if (st.activePowerUp == MAGNET && frameCount % 10 == 0) {
-            Vec foodDir = {0, 0};
-            if (st.food.r < newHead.r) foodDir.r = 1;
-            else if (st.food.r > newHead.r) foodDir.r = -1;
-            if (st.food.c < newHead.c) foodDir.c = 1;
-            else if (st.food.c > newHead.c) foodDir.c = -1;
-
-            Vec newFood = {st.food.r + foodDir.r, st.food.c + foodDir.c};
-            if (inBounds(cfg, newFood) && !st.obstacles.count({newFood.r, newFood.c})) {
-                bool blocked = false;
-                for (auto &seg : st.snake) if (seg.r == newFood.r && seg.c == newFood.c) { blocked = true; break; }
-                if (!blocked) {
-                    drawCell(cfg, originRow, originCol, st.food, EMPTY);
-                    st.food = newFood;
-                }
-            }
-        }
-
         if (st.segmentsToGrow > 0) {
             st.segmentsToGrow--;
         } else if (st.segmentsToShrink > 0 && st.snake.size() > 3) {
@@ -975,11 +1022,26 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
                 drawCell(cfg, originRow, originCol, extraTail, EMPTY);
             }
             st.snake.pop_back();
-            drawCell(cfg, originRow, originCol, tail, EMPTY);
-            if (st.snake.size() <= 1) { st.gameOver = true; break; }
+            drawCell(cfg, originRow, originCol, tail1, EMPTY);
         } else {
             st.snake.pop_back();
-            drawCell(cfg, originRow, originCol, tail, EMPTY);
+            drawCell(cfg, originRow, originCol, tail1, EMPTY);
+        }
+
+        if (st.segmentsToGrow2 > 0) {
+            st.segmentsToGrow2--;
+        } else if (st.segmentsToShrink2 > 0 && st.snake2.size() > 3) {
+            st.segmentsToShrink2--;
+            st.snake2.pop_back();
+            if (!st.snake2.empty()) {
+                Vec extraTail = st.snake2.back();
+                drawCell(cfg, originRow, originCol, extraTail, EMPTY);
+            }
+            st.snake2.pop_back();
+            drawCell(cfg, originRow, originCol, tail2, EMPTY);
+        } else {
+            st.snake2.pop_back();
+            drawCell(cfg, originRow, originCol, tail2, EMPTY);
         }
 
         for (auto& dob : st.dynamicObstacles)
@@ -988,10 +1050,16 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
             string puGlyph = (pu.type == SLOW_MOTION) ? POWERUP_SLOW : (pu.type == INVINCIBILITY) ? POWERUP_SHIELD : POWERUP_MAGNET;
             drawCell(cfg, originRow, originCol, pu.pos, puGlyph);
         }
+
         if (st.snake.size() > 1)
             drawCell(cfg, originRow, originCol, st.snake[1], SNAKE_BODY);
         drawCell(cfg, originRow, originCol, st.snake.front(), st.activePowerUp == INVINCIBILITY ? SNAKE_INVINCIBLE : SNAKE_HEAD);
-        if (ate && !st.gameOver) {
+
+        if (st.snake2.size() > 1)
+            drawCell(cfg, originRow, originCol, st.snake2[1], SNAKE2_BODY);
+        drawCell(cfg, originRow, originCol, st.snake2.front(), SNAKE2_HEAD);
+
+        if ((ate1 || ate2) && !st.gameOver) {
             foodGlyph = (st.foodType == GOLDEN) ? FOOD_GOLDEN : (st.foodType == POISON) ? FOOD_POISON : FOOD_NORMAL;
             drawCell(cfg, originRow, originCol, st.food, foodGlyph);
         }
