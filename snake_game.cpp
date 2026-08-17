@@ -76,6 +76,8 @@ namespace Color {
 static const string SNAKE_HEAD = Color::BRIGHT_GREEN + "🐉" + Color::RESET;
 static const string SNAKE_BODY = Color::GREEN + "🐉" + Color::RESET;
 static const string SNAKE_INVINCIBLE = Color::BRIGHT_CYAN + "🐉" + Color::RESET;
+static const string SNAKE2_HEAD = Color::BRIGHT_MAGENTA + "🐍" + Color::RESET;
+static const string SNAKE2_BODY = Color::MAGENTA + "🐍" + Color::RESET;
 static const string FOOD_NORMAL = Color::BRIGHT_RED + "🍎" + Color::RESET;
 static const string FOOD_GOLDEN = Color::BRIGHT_YELLOW + "⭐" + Color::RESET;
 static const string FOOD_POISON = Color::MAGENTA + "☠️" + Color::RESET;
@@ -121,7 +123,7 @@ struct GameConfig {
     int normalAppleScore = 10, goldenAppleScore = 50, poisonApplePenalty = -30;
     bool bordersEnabled = true;
     int currentLevel = 1, maxLevel = 5;
-    int numPlayers = 1;
+    int numPlayers = 2;
     KeyBindings keys;
     bool debugMode = true;
 };
@@ -143,7 +145,7 @@ struct GameState {
     string loserInfo = "";
 };
 
-static atomic<Dir> inputDir;
+static atomic<Dir> inputDir, inputDir2;
 static atomic<bool> inputQuit{false}, inputPause{false};
 static KeyBindings currentKeys;
 
@@ -730,7 +732,7 @@ void inputThreadFunc() {
             int ch = _getch();
 
 #ifdef _WIN32
-            if (ch == 224) {
+            if (ch == 224 || ch == 0) {
                 int ar = _getch();
                 if (ar == 72) inputDir = UP;
                 else if (ar == 80) inputDir = DOWN;
@@ -757,10 +759,10 @@ void inputThreadFunc() {
             if (ch == currentKeys.quit) { inputQuit = true; break; }
             if (ch == currentKeys.pause) { inputPause = !inputPause.load(); }
 
-            if (ch == currentKeys.up) inputDir = UP;
-            else if (ch == currentKeys.down) inputDir = DOWN;
-            else if (ch == currentKeys.left) inputDir = LEFT;
-            else if (ch == currentKeys.right) inputDir = RIGHT;
+            if (ch == 'w') inputDir2 = UP;
+            else if (ch == 's') inputDir2 = DOWN;
+            else if (ch == 'a') inputDir2 = LEFT;
+            else if (ch == 'd') inputDir2 = RIGHT;
         }
     }
 }
@@ -914,8 +916,11 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
             }
         }
 
-        Dir nd = inputDir.load();
-        if (!st.players.empty() && !isOpposite(st.players[0].dir, nd)) st.players[0].dir = nd;
+        Dir nd1 = inputDir.load();
+        if (st.players.size() > 0 && !isOpposite(st.players[0].dir, nd1)) st.players[0].dir = nd1;
+        Dir nd2 = inputDir2.load();
+        if (st.players.size() > 1 && !isOpposite(st.players[1].dir, nd2)) st.players[1].dir = nd2;
+
         if (inputQuit.load()) { st.quit = true; break; }
 
         updateGameSpeed(cfg, st);
@@ -941,18 +946,18 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
 
             Vec newHead = step(player.snake.front(), player.dir);
             if (cfg.bordersEnabled) {
-                if (!inBounds(cfg, newHead)) st.gameOver = true;
+                if (!inBounds(cfg, newHead)) { st.gameOver = true; st.loserInfo = "P" + to_string(pIndex + 1) + " hit border!"; }
             } else {
                 newHead = wrapPosition(cfg, newHead);
             }
 
             if (!st.gameOver && st.activePowerUp != INVINCIBILITY) {
-                if (st.obstacles.count({newHead.r, newHead.c})) st.gameOver = true;
+                if (st.obstacles.count({newHead.r, newHead.c})) { st.gameOver = true; st.loserInfo = "P" + to_string(pIndex + 1) + " hit obstacle!"; }
                 for (auto& dob : st.dynamicObstacles)
-                    if (dob.pos.r == newHead.r && dob.pos.c == newHead.c) st.gameOver = true;
+                    if (dob.pos.r == newHead.r && dob.pos.c == newHead.c) { st.gameOver = true; st.loserInfo = "P" + to_string(pIndex + 1) + " hit obstacle!"; }
                 for (size_t otherP = 0; otherP < st.players.size(); ++otherP) {
                     for (auto &seg : st.players[otherP].snake) {
-                        if (seg.r == newHead.r && seg.c == newHead.c) { st.gameOver = true; break; }
+                        if (seg.r == newHead.r && seg.c == newHead.c) { st.gameOver = true; st.loserInfo = "P" + to_string(pIndex + 1) + " collided!"; break; }
                     }
                 }
             }
@@ -1006,7 +1011,7 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
                 }
                 player.snake.pop_back();
                 drawCell(cfg, originRow, originCol, tail, EMPTY);
-                if (player.snake.size() <= 1) { st.gameOver = true; break; }
+                if (player.snake.size() <= 1) { st.gameOver = true; st.loserInfo = "P" + to_string(pIndex + 1) + " shrunk!"; break; }
             } else {
                 player.snake.pop_back();
                 drawCell(cfg, originRow, originCol, tail, EMPTY);
@@ -1018,9 +1023,11 @@ void runGame(GameConfig cfg, GameState& st, LayoutInfo& layout) {
                 string puGlyph = (pu.type == SLOW_MOTION) ? POWERUP_SLOW : (pu.type == INVINCIBILITY) ? POWERUP_SHIELD : POWERUP_MAGNET;
                 drawCell(cfg, originRow, originCol, pu.pos, puGlyph);
             }
+            string bodyGlyph = (pIndex == 0) ? SNAKE_BODY : SNAKE2_BODY;
+            string headGlyph = (pIndex == 0) ? (st.activePowerUp == INVINCIBILITY ? SNAKE_INVINCIBLE : SNAKE_HEAD) : SNAKE2_HEAD;
             if (player.snake.size() > 1)
-                drawCell(cfg, originRow, originCol, player.snake[1], SNAKE_BODY);
-            drawCell(cfg, originRow, originCol, player.snake.front(), st.activePowerUp == INVINCIBILITY ? SNAKE_INVINCIBLE : SNAKE_HEAD);
+                drawCell(cfg, originRow, originCol, player.snake[1], bodyGlyph);
+            drawCell(cfg, originRow, originCol, player.snake.front(), headGlyph);
             if (ate && !st.gameOver) {
                 foodGlyph = (st.foodType == GOLDEN) ? FOOD_GOLDEN : (st.foodType == POISON) ? FOOD_POISON : FOOD_NORMAL;
                 drawCell(cfg, originRow, originCol, st.food, foodGlyph);
