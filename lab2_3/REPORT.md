@@ -1,8 +1,4 @@
-# Lab 2_3 — Group A__
-
-> Copy this file to `lab2_3/REPORT.md` in your fork and fill it in. Keep the eight
-> headings exactly as they are — they are the marking scheme, in order. Delete this
-> quote block and every `___` when you are done.
+# Lab 2_3 — Group Aman Rohera
 
 ---
 
@@ -60,10 +56,10 @@ Run `lab2_3/check-lab2_3.sh` and paste the table it prints.
 
 | # | sha | subject | what it is |
 |---|---|---|---|
-| 1 | ___ | ___ | glossary |
-| 2 | ___ | ___ | smell report |
-| 3 | ___ | ___ | **the refactor, alone** |
-| 4 | ___ | ___ | **the feature, alone** |
+| 1 | e135e36 | docs: add ubiquitous language glossary | glossary |
+| 2 | 70780ad | docs: add code smell audit for main branch | smell report |
+| 3 | b55230f | refactor: generalize snake entity count into a player collection | the refactor alone |
+| 4 | 257544b | feat: add local 2-player multiplayer snake mode | the feature alone |
 
 ---
 
@@ -73,14 +69,14 @@ Run 1 is your Lab-1 branch — the numbers you already reported. Run 2 is commit
 
 | | Run 1 (Lab 1) | Run 2 (commit 4) |
 |---|---|---|
-| Smells introduced | ___ | ___ |
-| Lines changed, `git diff --shortstat -w` | ___ | ___ |
-| Lines changed, **raw** (no `-w`) | ___ | ___ |
-| Functions reached | ___ | ___ |
-| Prompts to working code | ___ | ___ |
-| Wall-clock time | ___ | ___ |
+| Smells introduced | 2 | 0 |
+| Lines changed, `git diff --shortstat -w` | 5 files changed, 205 insertions(+), 64 deletions(-) | 1 file changed, 23 insertions(+), 16 deletions(-) |
+| Lines changed, **raw** (no `-w`) | 5 files changed, 206 insertions(+), 65 deletions(-) | 1 file changed, 23 insertions(+), 16 deletions(-) |
+| Functions reached | 8 | 2 |
+| Prompts to working code | 4 | 1 |
+| Wall-clock time | 25 mins | 5 mins |
 
-Commit 3 (the refactor) on its own: ___ lines `-w`, ___ raw.
+Commit 3 (the refactor) on its own: 1 file changed, 127 insertions(+), 96 deletions(-) `-w`, 1 file changed, 173 insertions(+), 142 deletions(-) raw.
 
 `check-lab2_3.sh` prints the four line-count numbers for run 2. Use them — they are measured
 the same way for every group, which is what makes the class comparison mean anything.
@@ -92,12 +88,12 @@ the same way for every group, which is what makes the class comparison mean anyt
 **Q1. Which smell did commit 3 actually fix?** Name it from your section 3 report. What was
 expensive before, what does it cost now.
 
-___
+Commit 3 fixed **Duplicate Code** (and Primitive Obsession). Before refactoring, adding a second player required duplicating every snake operation (movement, wall bounds, obstacle collisions, food consumption, growth/shrinkage, and rendering) for `snake2`, duplicating score variables, and duplicating direction state across 8 functions (~270 lines changed). Now, using `Player` collection (`vector<Player> players`) and `numPlayers = 2` config in `GameConfig`, all snake operations run in a single loop. Adding Player 2 costs only 39 lines of code and zero duplicate logic.
 
 **Q2. Compare commit 4 to your Lab-1 diff.** Same feature, same codebase. What changed in
 the cost and what did not? If it got worse, say so and explain — that marks the same.
 
-___
+In Lab 1, adding multiplayer required 271 raw lines changed across 5 files, touching 8 functions, and introducing major Duplicate Code smells. In Commit 4, adding multiplayer required only 39 raw lines changed in 1 file (`snake_game.cpp`), touching only 2 functions (`inputThreadFunc` and `runGame`), with **0 code smells** introduced. Control wiring (WASD) and color glyph assignments remained necessary, but line churn dropped by ~85%, zero duplicate logic was added, and design health was preserved.
 
 ---
 
@@ -107,20 +103,12 @@ ___
 before adding the feature?** Quote it if it did. If it did not, what would have had to be
 different in your prompt?
 
-___
+No, the assistant did **not** suggest restructuring before adding the feature. In Reply 3 of `LLM-LOG.md`, when prompted to "start implementing", the assistant immediately added `deque<Vec> snake2`, `Dir dir2 = LEFT`, and `int score2 = 0` directly into `GameState` and duplicated game loop logic line-by-line. To make the assistant propose refactoring first, the prompt would need explicit design constraints, e.g.: *"Audit `GameState` for scalability before implementing. Refactor snake state into a reusable `Player` abstraction so player count is configured in a single place without duplicating fields or loops."*
 
 **Q4. How do you know commit 3 did not change behaviour?** Answer honestly. Most of you will
 find that you do not know. Say that plainly if it is true, and describe what you would have
 needed in order to actually know.
 
-___
+We do **not** know with 100% mathematical certainty because the repo lacks automated tests. We verified behavior preservation manually by compiling (`g++ -std=c++17`) and playtesting single-player mode (movement, wall wrapping, obstacle collisions, food collection, scoring, level-ups). To *know* with certainty, we would need: (1) unit tests for core mechanics (`step()`, `inBounds()`), (2) deterministic game-state regression tests with recorded key sequences, and (3) automated CI test runs validating invariants before and after commit 3.
 
 ---
-
-Sections 7 and 8 together: **500 words maximum.**
-
-## If you did not finish
-
-Say so here and lose no marks. What you got to, where it broke, what you tried.
-
-___
